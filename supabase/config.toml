@@ -1,0 +1,17 @@
+project_id = "iivgirvlatkcwklflmzc"
+
+[functions.flutterwave-initiate]
+verify_jwt = false
+
+[functions.flutterwave-verify]
+verify_jwt = false
+
+[functions.flutterwave-webhook]
+verify_jwt = false
+
+[functions.admin-create-user]
+verify_jwt = true
+
+[functions.installment-reminders]
+verify_jwt = false
+
