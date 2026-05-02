@@ -38,15 +38,14 @@ const Admin = () => {
     return (
       <Layout>
         <div className="container py-20 max-w-md text-center">
-          <ShieldCheck className="size-12 text-primary mx-auto mb-4" />
-          <h1 className="font-display text-4xl mb-4">Admin access required</h1>
-          <p className="text-muted-foreground text-sm mb-6">
-            Your account doesn't have admin privileges yet. Run this once in the Supabase SQL editor to grant yourself admin:
+          <ShieldCheck className="size-12 text-primary mx-auto mb-4" strokeWidth={1.2} />
+          <span className="text-[11px] tracking-[0.3em] uppercase text-primary">Restricted</span>
+          <h1 className="font-display text-4xl mt-2 mb-4">Access denied</h1>
+          <p className="text-muted-foreground text-sm mb-8">
+            This area is only available to Vivygold administrators.
+            If you believe this is a mistake, please contact the store owner.
           </p>
-          <pre className="bg-card border border-border p-4 text-xs text-left overflow-x-auto">
-{`INSERT INTO public.user_roles (user_id, role)
-VALUES ('${user.id}', 'admin');`}
-          </pre>
+          <Button variant="gold" onClick={signOut}>Sign out</Button>
         </div>
       </Layout>
     );
