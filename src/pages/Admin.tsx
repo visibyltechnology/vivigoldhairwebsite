@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShieldCheck, LayoutDashboard, Package, ShoppingBag, CreditCard, Users, Shield, Settings as SettingsIcon, Bell } from "lucide-react";
+import { ShieldCheck, LayoutDashboard, Package, ShoppingBag, CreditCard, Users, Shield, Settings as SettingsIcon, Bell, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { OverviewTab } from "@/components/admin/OverviewTab";
 import { ProductsTab } from "@/components/admin/ProductsTab";
 import { OrdersTab } from "@/components/admin/OrdersTab";
@@ -15,7 +16,7 @@ import { AdminsTab } from "@/components/admin/AdminsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 
 const Admin = () => {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading, signOut } = useAuth();
   const [rate, setRate] = useState(1650);
   const [tab, setTab] = useState("overview");
 
@@ -65,12 +66,17 @@ VALUES ('${user.id}', 'admin');`}
   return (
     <Layout>
       <div className="container py-12">
-        <div className="mb-10">
-          <span className="text-[11px] tracking-[0.3em] uppercase text-primary">Admin</span>
-          <h1 className="font-display text-5xl mt-2">Vivygold control room</h1>
-          <p className="text-sm text-muted-foreground mt-2">
-            Logged in as <span className="text-foreground">{user.email}</span>
-          </p>
+        <div className="mb-10 flex items-start justify-between gap-4">
+          <div>
+            <span className="text-[11px] tracking-[0.3em] uppercase text-primary">Admin</span>
+            <h1 className="font-display text-5xl mt-2">Vivygold control room</h1>
+            <p className="text-sm text-muted-foreground mt-2">
+              Logged in as <span className="text-foreground">{user.email}</span>
+            </p>
+          </div>
+          <Button variant="luxe" size="sm" onClick={signOut} className="mt-2 shrink-0">
+            <LogOut className="size-3" /> Sign out
+          </Button>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
