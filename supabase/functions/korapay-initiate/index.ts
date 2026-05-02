@@ -5,6 +5,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Supabase project ref — webhook must point here, not at the frontend
+const SUPABASE_FUNCTIONS_URL = "https://iivgirvlatkcwklflmzc.supabase.co/functions/v1";
+
 interface CartLine {
   product_id: string;
   name: string;
@@ -34,6 +37,7 @@ Deno.serve(async (req) => {
 
     const supabase = adminClient();
 
+    // Resolve authenticated user if JWT present (optional — guests can still checkout)
     const authHeader = req.headers.get("Authorization");
     let userId: string | null = null;
     if (authHeader) {
@@ -49,6 +53,7 @@ Deno.serve(async (req) => {
     const subtotal = body.items.reduce((s, i) => s + i.price * i.quantity, 0);
     const total = subtotal + (body.shipping_fee || 0);
 
+    // Create order first so we have an ID before calling Korapay
     const { data: order, error: orderErr } = await supabase
       .from("orders")
       .insert({
@@ -98,10 +103,35 @@ Deno.serve(async (req) => {
     }
 
     const reference = `${order.order_number}-P1-${Date.now()}`;
-    const origin = req.headers.get("origin") || "https://example.com";
 
-    // Korapay supports NGN natively; convert USD→NGN using a fallback rate if needed
-    const amountInKobo = body.currency === "NGN" ? firstAmount : firstAmount * 100;
+    // Frontend origin for redirect — read from request origin header or fall back to prod domain
+    const origin = req.headers.get("origin") || "https://thisonevivygoldhair.com.ng";
+
+    // Korapay API: amount is in naira (major unit), not kobo
+    const koraPayload = {
+      reference,
+      amount: firstAmount,
+      currency: "NGN",
+      // Webhook must point to Supabase edge function — NOT the frontend
+      notification_url: `${SUPABASE_FUNCTIONS_URL}/korapay-webhook`,
+      // After payment Korapay redirects the browser back to this URL
+      redirect_url: `${origin}/order-success?order_id=${order.id}`,
+      customer: {
+        name: body.customer.name,
+        email: body.customer.email,
+      },
+      // Accept card, bank transfer and USSD (Korapay supported channels)
+      channels: ["card", "bank_transfer", "ussd"],
+      metadata: {
+        order_id: order.id,
+        order_number: order.order_number,
+        part_number: 1,
+        total_parts: parts,
+        is_installment: body.is_installment,
+      },
+    };
+
+    console.log("Korapay payload:", JSON.stringify(koraPayload));
 
     const koraRes = await fetch("https://api.korapay.com/merchant/api/v1/charges/initialize", {
       method: "POST",
@@ -109,29 +139,17 @@ Deno.serve(async (req) => {
         Authorization: `Bearer ${KORA_SECRET}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        reference,
-        amount: firstAmount,
-        currency: "NGN",
-        notification_url: `${origin}/api/korapay-webhook`,
-        redirect_url: `${origin}/order-success?order_id=${order.id}`,
-        customer: {
-          name: body.customer.name,
-          email: body.customer.email,
-        },
-        metadata: {
-          order_id: order.id,
-          order_number: order.order_number,
-          part_number: 1,
-          total_parts: parts,
-          is_installment: body.is_installment,
-        },
-      }),
+      body: JSON.stringify(koraPayload),
     });
 
     const koraJson = await koraRes.json();
-    if (!koraJson?.data?.checkout_url) {
-      throw new Error(koraJson?.message || "Korapay init failed — check your secret key in Admin → Settings → Korapay.");
+    console.log("Korapay response:", JSON.stringify(koraJson));
+
+    if (!koraJson?.status || !koraJson?.data?.checkout_url) {
+      throw new Error(
+        `Korapay error: ${koraJson?.message || "No checkout_url returned"}. ` +
+        `Check your secret key in Admin → Settings → Korapay.`
+      );
     }
 
     return new Response(
