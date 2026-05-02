@@ -1,4 +1,4 @@
-// Shared helper: read Flutterwave keys from settings table first, fall back to env vars.
+// Shared helper: read payment keys from settings table, fall back to env vars.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 export interface FlwKeys {
@@ -6,6 +6,11 @@ export interface FlwKeys {
   secret_key: string;
   encryption_key?: string;
   webhook_hash?: string;
+}
+
+export interface KorapayKeys {
+  public_key: string;
+  secret_key: string;
 }
 
 export const adminClient = () =>
@@ -44,4 +49,30 @@ export async function getFlutterwaveKeys(): Promise<FlwKeys> {
   if (!webhook_hash) webhook_hash = (Deno.env.get("FLUTTERWAVE_WEBHOOK_HASH") || "").trim();
 
   return { public_key, secret_key, encryption_key, webhook_hash };
+}
+
+export async function getKorapayKeys(): Promise<KorapayKeys> {
+  let public_key = "";
+  let secret_key = "";
+
+  try {
+    const sb = adminClient();
+    const { data } = await sb
+      .from("settings")
+      .select("value")
+      .eq("key", "korapay_keys")
+      .maybeSingle();
+    if (data?.value) {
+      const v = data.value as KorapayKeys;
+      public_key = (v.public_key || "").trim();
+      secret_key = (v.secret_key || "").trim();
+    }
+  } catch (_e) {
+    // ignore
+  }
+
+  if (!secret_key) secret_key = (Deno.env.get("KORAPAY_SECRET_KEY") || "").trim();
+  if (!public_key) public_key = (Deno.env.get("KORAPAY_PUBLIC_KEY") || "").trim();
+
+  return { public_key, secret_key };
 }

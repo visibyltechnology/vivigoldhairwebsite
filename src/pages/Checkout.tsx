@@ -15,6 +15,11 @@ import { CreditCard, Loader2, Lock, ShoppingBag } from "lucide-react";
 
 const SHIPPING_FEES = { NGN: 5000, USD: 15 };
 
+interface GatewayState {
+  flutterwave: boolean;
+  korapay: boolean;
+}
+
 const Checkout = () => {
   const { items, subtotalNgn, subtotalUsd, clear } = useCart();
   const { currency, format } = useCurrency();
@@ -23,6 +28,8 @@ const Checkout = () => {
 
   const [loading, setLoading] = useState(false);
   const [parts, setParts] = useState<"1" | "2" | "3" | "4">("1");
+  const [selectedGateway, setSelectedGateway] = useState<"flutterwave" | "korapay">("flutterwave");
+  const [gateways, setGateways] = useState<GatewayState>({ flutterwave: true, korapay: false });
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -37,6 +44,25 @@ const Checkout = () => {
   useEffect(() => {
     if (user?.email) setForm((f) => ({ ...f, email: user.email || f.email }));
   }, [user]);
+
+  useEffect(() => {
+    supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "payment_gateways")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value) {
+          const v = data.value as any;
+          const flw = v?.flutterwave?.enabled ?? true;
+          const kora = v?.korapay?.enabled ?? false;
+          setGateways({ flutterwave: flw, korapay: kora });
+          // Auto-select first enabled gateway
+          if (flw) setSelectedGateway("flutterwave");
+          else if (kora) setSelectedGateway("korapay");
+        }
+      });
+  }, []);
 
   if (items.length === 0) {
     return (
@@ -56,6 +82,9 @@ const Checkout = () => {
   const partsNum = Number(parts);
   const firstPay = partsNum > 1 ? Math.ceil(total / partsNum) : total;
 
+  const enabledCount = (gateways.flutterwave ? 1 : 0) + (gateways.korapay ? 1 : 0);
+  const showGatewayPicker = enabledCount > 1;
+
   const handlePay = async () => {
     if (!user) {
       toast.error("Please sign in to checkout");
@@ -64,6 +93,10 @@ const Checkout = () => {
     }
     if (!form.name || !form.email || !form.address || !form.city) {
       toast.error("Please fill in all shipping details");
+      return;
+    }
+    if (enabledCount === 0) {
+      toast.error("No payment gateway is active. Please contact the store.");
       return;
     }
 
@@ -91,13 +124,11 @@ const Checkout = () => {
         installment_parts: partsNum,
       };
 
-      const { data, error } = await supabase.functions.invoke("flutterwave-initiate", {
-        body: payload,
-      });
+      const fnName = selectedGateway === "korapay" ? "korapay-initiate" : "flutterwave-initiate";
+      const { data, error } = await supabase.functions.invoke(fnName, { body: payload });
       if (error) throw error;
       if (!data?.payment_link) throw new Error(data?.error || "No payment link returned");
 
-      // Stash cart for clearing after success
       sessionStorage.setItem("vg_pending_order", data.order_id);
       window.location.href = data.payment_link;
     } catch (e) {
@@ -106,6 +137,12 @@ const Checkout = () => {
       setLoading(false);
     }
   };
+
+  const gatewayLabel = selectedGateway === "korapay" ? "Korapay" : "Flutterwave";
+  const gatewaySubtext =
+    selectedGateway === "korapay"
+      ? "Korapay · Cards · Bank transfer · USSD"
+      : "Flutterwave · Cards · Bank transfer · USSD";
 
   return (
     <Layout>
@@ -159,6 +196,45 @@ const Checkout = () => {
                 </div>
               </div>
             </section>
+
+            {/* Payment gateway picker — only shown when both are enabled */}
+            {showGatewayPicker && (
+              <section className="border border-border bg-card p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="size-4 text-primary" />
+                  <h2 className="font-display text-2xl">Payment method</h2>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">Choose how you'd like to pay.</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {gateways.flutterwave && (
+                    <button
+                      onClick={() => setSelectedGateway("flutterwave")}
+                      className={`border p-4 text-left transition ${
+                        selectedGateway === "flutterwave"
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <p className="font-medium text-sm">🟠 Flutterwave</p>
+                      <p className="text-xs text-muted-foreground mt-1">Cards · Bank transfer · USSD</p>
+                    </button>
+                  )}
+                  {gateways.korapay && (
+                    <button
+                      onClick={() => setSelectedGateway("korapay")}
+                      className={`border p-4 text-left transition ${
+                        selectedGateway === "korapay"
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <p className="font-medium text-sm">🟣 Korapay</p>
+                      <p className="text-xs text-muted-foreground mt-1">Cards · Bank transfer · USSD</p>
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
 
             <section className="border border-primary/30 bg-primary/5 p-6">
               <div className="flex items-center gap-2 mb-4">
@@ -223,10 +299,10 @@ const Checkout = () => {
               </div>
             )}
             <Button variant="gold" size="lg" className="w-full" onClick={handlePay} disabled={loading}>
-              {loading ? <><Loader2 className="size-4 animate-spin" /> Redirecting…</> : <><Lock className="size-4" /> Pay with Flutterwave</>}
+              {loading ? <><Loader2 className="size-4 animate-spin" /> Redirecting…</> : <><Lock className="size-4" /> Pay with {gatewayLabel}</>}
             </Button>
             <p className="text-[11px] text-muted-foreground text-center mt-3">
-              Secured by Flutterwave · Cards · Bank transfer · USSD
+              Secured by {gatewaySubtext}
             </p>
           </aside>
         </div>

@@ -5,13 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Eye, EyeOff, Save, KeyRound } from "lucide-react";
+import { Eye, EyeOff, Save, KeyRound, ToggleLeft, ToggleRight } from "lucide-react";
 
 interface FlwKeys {
   public_key: string;
   secret_key: string;
   encryption_key: string;
   webhook_hash: string;
+}
+
+interface KorapayKeys {
+  public_key: string;
+  secret_key: string;
+}
+
+interface PaymentGateways {
+  flutterwave: { enabled: boolean };
+  korapay: { enabled: boolean };
 }
 
 interface StoreInfo {
@@ -31,9 +41,16 @@ interface ShippingSettings {
 
 export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => void }) => {
   const [flw, setFlw] = useState<FlwKeys>({ public_key: "", secret_key: "", encryption_key: "", webhook_hash: "" });
-  const [showSecret, setShowSecret] = useState(false);
-  const [showEnc, setShowEnc] = useState(false);
-  const [showHash, setShowHash] = useState(false);
+  const [kora, setKora] = useState<KorapayKeys>({ public_key: "", secret_key: "" });
+  const [gateways, setGateways] = useState<PaymentGateways>({
+    flutterwave: { enabled: true },
+    korapay: { enabled: false },
+  });
+
+  const [showFlwSecret, setShowFlwSecret] = useState(false);
+  const [showFlwEnc, setShowFlwEnc] = useState(false);
+  const [showFlwHash, setShowFlwHash] = useState(false);
+  const [showKoraSecret, setShowKoraSecret] = useState(false);
 
   const [rate, setRate] = useState(1650);
   const [defaultCurrency, setDefaultCurrency] = useState<"NGN" | "USD">("NGN");
@@ -59,6 +76,16 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
             secret_key: v?.secret_key ?? "",
             encryption_key: v?.encryption_key ?? "",
             webhook_hash: v?.webhook_hash ?? "",
+          });
+        } else if (row.key === "korapay_keys") {
+          setKora({
+            public_key: v?.public_key ?? "",
+            secret_key: v?.secret_key ?? "",
+          });
+        } else if (row.key === "payment_gateways") {
+          setGateways({
+            flutterwave: { enabled: v?.flutterwave?.enabled ?? true },
+            korapay: { enabled: v?.korapay?.enabled ?? false },
           });
         } else if (row.key === "exchange_rate") {
           setRate(v?.usd_to_ngn ?? 1650);
@@ -97,6 +124,21 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
     if (await upsertSetting("flutterwave_keys", flw)) toast.success("Flutterwave keys saved");
   };
 
+  const saveKora = async () => {
+    if (await upsertSetting("korapay_keys", kora)) toast.success("Korapay keys saved");
+  };
+
+  const toggleGateway = async (gateway: "flutterwave" | "korapay") => {
+    const updated = {
+      ...gateways,
+      [gateway]: { enabled: !gateways[gateway].enabled },
+    };
+    if (await upsertSetting("payment_gateways", updated)) {
+      setGateways(updated);
+      toast.success(`${gateway === "flutterwave" ? "Flutterwave" : "Korapay"} ${updated[gateway].enabled ? "enabled" : "disabled"}`);
+    }
+  };
+
   const saveRate = async () => {
     if (await upsertSetting("exchange_rate", { usd_to_ngn: Number(rate), default_currency: defaultCurrency })) {
       toast.success("Exchange rate updated");
@@ -112,8 +154,59 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
     if (await upsertSetting("store_info", store)) toast.success("Store info updated");
   };
 
+  const GatewayToggle = ({ id, label, logo, enabled }: { id: "flutterwave" | "korapay"; label: string; logo: string; enabled: boolean }) => (
+    <div className={`flex items-center justify-between p-4 border ${enabled ? "border-primary/50 bg-primary/5" : "border-border bg-card"}`}>
+      <div className="flex items-center gap-3">
+        <div className="text-sm font-medium">{logo}</div>
+        <div>
+          <p className="font-medium text-sm">{label}</p>
+          <p className={`text-xs ${enabled ? "text-primary" : "text-muted-foreground"}`}>
+            {enabled ? "Active — customers can pay with this" : "Inactive — hidden from checkout"}
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={() => toggleGateway(id)}
+        className={`flex items-center gap-2 text-sm px-4 py-1.5 border transition-colors ${
+          enabled
+            ? "border-primary text-primary hover:bg-primary/10"
+            : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+        }`}
+      >
+        {enabled ? <ToggleRight className="size-4" /> : <ToggleLeft className="size-4" />}
+        {enabled ? "ON" : "OFF"}
+      </button>
+    </div>
+  );
+
   return (
     <div className="space-y-8">
+
+      {/* Payment gateway toggles */}
+      <section className="border border-border bg-card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <ToggleRight className="size-4 text-primary" />
+          <h3 className="font-display text-2xl">Payment gateways</h3>
+        </div>
+        <p className="text-sm text-muted-foreground mb-5">
+          Turn each gateway on or off. If both are enabled, customers can choose at checkout. At least one should be active.
+        </p>
+        <div className="space-y-3">
+          <GatewayToggle
+            id="flutterwave"
+            label="Flutterwave"
+            logo="🟠 Flutterwave"
+            enabled={gateways.flutterwave.enabled}
+          />
+          <GatewayToggle
+            id="korapay"
+            label="Korapay"
+            logo="🟣 Korapay"
+            enabled={gateways.korapay.enabled}
+          />
+        </div>
+      </section>
+
       {/* Flutterwave keys */}
       <section className="border border-border bg-card p-6">
         <div className="flex items-center gap-2 mb-1">
@@ -121,7 +214,7 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
           <h3 className="font-display text-2xl">Flutterwave keys</h3>
         </div>
         <p className="text-sm text-muted-foreground mb-5">
-          These power both single payments and installment checkouts. Keys saved here are used by the checkout edge functions.
+          Powers single payments and installment checkouts. Get your keys from the Flutterwave dashboard.
         </p>
         <div className="grid md:grid-cols-2 gap-4">
           <div>
@@ -137,18 +230,14 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
             <Label>Secret key</Label>
             <div className="relative mt-1">
               <Input
-                type={showSecret ? "text" : "password"}
+                type={showFlwSecret ? "text" : "password"}
                 value={flw.secret_key}
                 onChange={(e) => setFlw({ ...flw, secret_key: e.target.value })}
                 placeholder="FLWSECK_TEST-xxxx or FLWSECK-xxxx"
                 className="bg-input font-mono text-xs pr-10"
               />
-              <button
-                type="button"
-                onClick={() => setShowSecret(!showSecret)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-              >
-                {showSecret ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              <button type="button" onClick={() => setShowFlwSecret(!showFlwSecret)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+                {showFlwSecret ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
           </div>
@@ -156,17 +245,13 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
             <Label>Encryption key (optional)</Label>
             <div className="relative mt-1">
               <Input
-                type={showEnc ? "text" : "password"}
+                type={showFlwEnc ? "text" : "password"}
                 value={flw.encryption_key}
                 onChange={(e) => setFlw({ ...flw, encryption_key: e.target.value })}
                 className="bg-input font-mono text-xs pr-10"
               />
-              <button
-                type="button"
-                onClick={() => setShowEnc(!showEnc)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-              >
-                {showEnc ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              <button type="button" onClick={() => setShowFlwEnc(!showFlwEnc)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+                {showFlwEnc ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
           </div>
@@ -174,17 +259,13 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
             <Label>Webhook secret hash (optional)</Label>
             <div className="relative mt-1">
               <Input
-                type={showHash ? "text" : "password"}
+                type={showFlwHash ? "text" : "password"}
                 value={flw.webhook_hash}
                 onChange={(e) => setFlw({ ...flw, webhook_hash: e.target.value })}
                 className="bg-input font-mono text-xs pr-10"
               />
-              <button
-                type="button"
-                onClick={() => setShowHash(!showHash)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-              >
-                {showHash ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              <button type="button" onClick={() => setShowFlwHash(!showFlwHash)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+                {showFlwHash ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
           </div>
@@ -194,11 +275,51 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
         </Button>
       </section>
 
+      {/* Korapay keys */}
+      <section className="border border-border bg-card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <KeyRound className="size-4 text-primary" />
+          <h3 className="font-display text-2xl">Korapay keys</h3>
+        </div>
+        <p className="text-sm text-muted-foreground mb-5">
+          Get your keys from the Korapay merchant dashboard at dashboard.korapay.com. Korapay processes payments in NGN.
+        </p>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label>Public key</Label>
+            <Input
+              value={kora.public_key}
+              onChange={(e) => setKora({ ...kora, public_key: e.target.value })}
+              placeholder="pk_live_xxxx or pk_test_xxxx"
+              className="bg-input mt-1 font-mono text-xs"
+            />
+          </div>
+          <div>
+            <Label>Secret key</Label>
+            <div className="relative mt-1">
+              <Input
+                type={showKoraSecret ? "text" : "password"}
+                value={kora.secret_key}
+                onChange={(e) => setKora({ ...kora, secret_key: e.target.value })}
+                placeholder="sk_live_xxxx or sk_test_xxxx"
+                className="bg-input font-mono text-xs pr-10"
+              />
+              <button type="button" onClick={() => setShowKoraSecret(!showKoraSecret)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+                {showKoraSecret ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+        <Button variant="gold" onClick={saveKora} className="mt-5">
+          <Save className="size-3" /> Save Korapay keys
+        </Button>
+      </section>
+
       {/* Currency rate */}
       <section className="border border-border bg-card p-6">
         <h3 className="font-display text-2xl mb-1">Currency & exchange rate</h3>
         <p className="text-sm text-muted-foreground mb-5">
-          The default currency for the storefront, plus the USD↔NGN rate used to auto-convert prices when a product is uploaded in the other currency.
+          The default currency for the storefront, plus the USD↔NGN rate used to auto-convert prices.
         </p>
         <div className="grid md:grid-cols-2 gap-4 max-w-xl">
           <div>
