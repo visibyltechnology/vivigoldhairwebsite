@@ -1,12 +1,33 @@
-import { adminClient, getKorapayKeys } from "../_shared/flw.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Supabase project ref — webhook must point here, not at the frontend
 const SUPABASE_FUNCTIONS_URL = "https://iivgirvlatkcwklflmzc.supabase.co/functions/v1";
+
+const adminClient = () =>
+  createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+async function getKorapayKeys() {
+  let public_key = "";
+  let secret_key = "";
+  try {
+    const sb = adminClient();
+    const { data } = await sb.from("settings").select("value").eq("key", "korapay_keys").maybeSingle();
+    if (data?.value) {
+      public_key = ((data.value as any).public_key || "").trim();
+      secret_key = ((data.value as any).secret_key || "").trim();
+    }
+  } catch (_) {}
+  if (!secret_key) secret_key = (Deno.env.get("KORAPAY_SECRET_KEY") || "").trim();
+  if (!public_key) public_key = (Deno.env.get("KORAPAY_PUBLIC_KEY") || "").trim();
+  return { public_key, secret_key };
+}
 
 interface CartLine {
   product_id: string;
@@ -37,12 +58,11 @@ Deno.serve(async (req) => {
 
     const supabase = adminClient();
 
-    // Resolve authenticated user if JWT present (optional — guests can still checkout)
     const authHeader = req.headers.get("Authorization");
     let userId: string | null = null;
     if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
-      const { data } = await supabase.auth.getUser(token);
+      const userToken = authHeader.replace("Bearer ", "");
+      const { data } = await supabase.auth.getUser(userToken);
       userId = data.user?.id ?? null;
     }
 
@@ -53,7 +73,6 @@ Deno.serve(async (req) => {
     const subtotal = body.items.reduce((s, i) => s + i.price * i.quantity, 0);
     const total = subtotal + (body.shipping_fee || 0);
 
-    // Create order first so we have an ID before calling Korapay
     const { data: order, error: orderErr } = await supabase
       .from("orders")
       .insert({
@@ -103,24 +122,18 @@ Deno.serve(async (req) => {
     }
 
     const reference = `${order.order_number}-P1-${Date.now()}`;
-
-    // Frontend origin for redirect — read from request origin header or fall back to prod domain
     const origin = req.headers.get("origin") || "https://thisonevivygoldhair.com.ng";
 
-    // Korapay API: amount is in naira (major unit), not kobo
     const koraPayload = {
       reference,
       amount: firstAmount,
       currency: "NGN",
-      // Webhook must point to Supabase edge function — NOT the frontend
       notification_url: `${SUPABASE_FUNCTIONS_URL}/korapay-webhook`,
-      // After payment Korapay redirects the browser back to this URL
       redirect_url: `${origin}/order-success?order_id=${order.id}`,
       customer: {
         name: body.customer.name,
         email: body.customer.email,
       },
-      // Accept card, bank transfer and USSD (Korapay supported channels)
       channels: ["card", "bank_transfer", "ussd"],
       metadata: {
         order_id: order.id,
@@ -131,7 +144,7 @@ Deno.serve(async (req) => {
       },
     };
 
-    console.log("Korapay payload:", JSON.stringify(koraPayload));
+    console.log("Calling Korapay with amount:", firstAmount, "reference:", reference);
 
     const koraRes = await fetch("https://api.korapay.com/merchant/api/v1/charges/initialize", {
       method: "POST",
@@ -143,13 +156,10 @@ Deno.serve(async (req) => {
     });
 
     const koraJson = await koraRes.json();
-    console.log("Korapay response:", JSON.stringify(koraJson));
+    console.log("Korapay response status:", koraJson?.status, "message:", koraJson?.message);
 
     if (!koraJson?.status || !koraJson?.data?.checkout_url) {
-      throw new Error(
-        `Korapay error: ${koraJson?.message || "No checkout_url returned"}. ` +
-        `Check your secret key in Admin → Settings → Korapay.`
-      );
+      throw new Error(`Korapay: ${koraJson?.message || "No checkout_url in response"}`);
     }
 
     return new Response(

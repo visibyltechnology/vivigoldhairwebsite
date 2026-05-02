@@ -10,7 +10,7 @@ async function getKorapaySecret(): Promise<string> {
   try {
     const sb = adminClient();
     const { data } = await sb.from("settings").select("value").eq("key", "korapay_keys").maybeSingle();
-    if (data?.value?.secret_key) return (data.value.secret_key as string).trim();
+    if (data?.value?.secret_key) return ((data.value as any).secret_key as string).trim();
   } catch (_) {}
   return (Deno.env.get("KORAPAY_SECRET_KEY") || "").trim();
 }
@@ -32,8 +32,6 @@ Deno.serve(async (req) => {
   try {
     const rawBody = await req.text();
     const secret = await getKorapaySecret();
-
-    // Verify webhook signature if secret is set
     const sig = req.headers.get("x-korapay-signature") || "";
     if (secret && sig) {
       const valid = await verifySignature(secret, rawBody, sig);
@@ -48,7 +46,6 @@ Deno.serve(async (req) => {
     const orderId = data?.metadata?.order_id;
     if (!orderId || !reference) return new Response("ok");
 
-    // Verify with Korapay API
     const verifyRes = await fetch(
       `https://api.korapay.com/merchant/api/v1/charges/${reference}`,
       { headers: { Authorization: `Bearer ${secret}` } },
@@ -59,47 +56,23 @@ Deno.serve(async (req) => {
     const txData = verifyJson.data;
     const supabase = adminClient();
 
-    const { data: order } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("id", orderId)
-      .maybeSingle();
+    const { data: order } = await supabase.from("orders").select("*").eq("id", orderId).maybeSingle();
     if (!order) return new Response("ok");
 
     const partNumber = Number(txData.metadata?.part_number ?? 1);
-    const totalParts = Number(txData.metadata?.total_parts ?? 1);
     const isInstallment = order.is_installment;
 
     if (!isInstallment) {
-      await supabase
-        .from("orders")
-        .update({ payment_status: "paid", status: "processing" })
-        .eq("id", orderId);
+      await supabase.from("orders").update({ payment_status: "paid", status: "processing" }).eq("id", orderId);
     } else {
-      const { data: inst } = await supabase
-        .from("installments")
-        .select("*")
-        .eq("order_id", orderId)
-        .maybeSingle();
-
+      const { data: inst } = await supabase.from("installments").select("*").eq("order_id", orderId).maybeSingle();
       if (inst) {
-        // Deduplicate by reference
-        const { data: existing } = await supabase
-          .from("installment_payments")
-          .select("id")
-          .eq("flutterwave_tx_ref", reference)
-          .maybeSingle();
+        const { data: existing } = await supabase.from("installment_payments").select("id").eq("flutterwave_tx_ref", reference).maybeSingle();
         if (existing) return new Response("ok");
-
         const paid = Number(inst.paid_amount) + Number(txData.amount);
         const remaining = Math.max(0, Number(inst.total_amount) - paid);
         const status = remaining <= 1 ? "completed" : "active";
-
-        await supabase
-          .from("installments")
-          .update({ paid_amount: paid, remaining_amount: remaining, status })
-          .eq("id", inst.id);
-
+        await supabase.from("installments").update({ paid_amount: paid, remaining_amount: remaining, status }).eq("id", inst.id);
         await supabase.from("installment_payments").insert({
           installment_id: inst.id,
           part_number: partNumber,
@@ -109,14 +82,10 @@ Deno.serve(async (req) => {
           flutterwave_tx_ref: reference,
           paid_at: new Date().toISOString(),
         });
-
-        await supabase
-          .from("orders")
-          .update({
-            payment_status: remaining <= 1 ? "paid" : "partial",
-            status: remaining <= 1 ? "processing" : "pending",
-          })
-          .eq("id", orderId);
+        await supabase.from("orders").update({
+          payment_status: remaining <= 1 ? "paid" : "partial",
+          status: remaining <= 1 ? "processing" : "pending",
+        }).eq("id", orderId);
       }
     }
 
