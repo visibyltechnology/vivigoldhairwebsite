@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,10 +6,7 @@ const corsHeaders = {
 };
 
 const adminClient = () =>
-  createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
+  createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 async function getKorapaySecret(): Promise<string> {
   try {
@@ -22,24 +19,18 @@ async function getKorapaySecret(): Promise<string> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
   try {
     const secret = await getKorapaySecret();
     if (!secret) throw new Error("Korapay secret key not configured.");
 
     const url = new URL(req.url);
-    const reference =
-      url.searchParams.get("reference") ||
-      (await req.json().catch(() => ({}))).reference;
-
+    const reference = url.searchParams.get("reference") || (await req.json().catch(() => ({}))).reference;
     if (!reference) throw new Error("Missing reference");
 
-    const verifyRes = await fetch(
-      `https://api.korapay.com/merchant/api/v1/charges/${reference}`,
-      { headers: { Authorization: `Bearer ${secret}` } },
-    );
+    const verifyRes = await fetch(`https://api.korapay.com/merchant/api/v1/charges/${reference}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
     const verifyJson = await verifyRes.json();
-
     if (!verifyJson?.data || verifyJson.data?.status !== "success") {
       return new Response(JSON.stringify({ paid: false, raw: verifyJson }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -55,9 +46,8 @@ Deno.serve(async (req) => {
     if (!order) throw new Error("Order not found");
 
     const partNumber = Number(txData.metadata?.part_number ?? 1);
-    const isInstallment = order.is_installment;
 
-    if (!isInstallment) {
+    if (!order.is_installment) {
       await supabase.from("orders").update({ payment_status: "paid", status: "processing" }).eq("id", orderId);
     } else {
       const { data: inst } = await supabase.from("installments").select("*").eq("order_id", orderId).maybeSingle();
@@ -67,12 +57,8 @@ Deno.serve(async (req) => {
         const status = remaining <= 1 ? "completed" : "active";
         await supabase.from("installments").update({ paid_amount: paid, remaining_amount: remaining, status }).eq("id", inst.id);
         await supabase.from("installment_payments").insert({
-          installment_id: inst.id,
-          part_number: partNumber,
-          amount: Number(txData.amount),
-          status: "paid",
-          flutterwave_tx_id: reference,
-          flutterwave_tx_ref: reference,
+          installment_id: inst.id, part_number: partNumber, amount: Number(txData.amount),
+          status: "paid", flutterwave_tx_id: reference, flutterwave_tx_ref: reference,
           paid_at: new Date().toISOString(),
         });
         await supabase.from("orders").update({
@@ -82,16 +68,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ paid: true, order_id: orderId }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ paid: true, order_id: orderId }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    console.error("korapay-verify error:", msg);
     return new Response(JSON.stringify({ error: msg, paid: false }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -130,10 +130,7 @@ Deno.serve(async (req) => {
       currency: "NGN",
       notification_url: `${SUPABASE_FUNCTIONS_URL}/korapay-webhook`,
       redirect_url: `${origin}/order-success?order_id=${order.id}`,
-      customer: {
-        name: body.customer.name,
-        email: body.customer.email,
-      },
+      customer: { name: body.customer.name, email: body.customer.email },
       channels: ["card", "bank_transfer", "ussd"],
       metadata: {
         order_id: order.id,
@@ -144,30 +141,23 @@ Deno.serve(async (req) => {
       },
     };
 
-    console.log("Calling Korapay with amount:", firstAmount, "reference:", reference);
+    console.log("Korapay payload amount:", firstAmount, "ref:", reference);
 
     const koraRes = await fetch("https://api.korapay.com/merchant/api/v1/charges/initialize", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${KORA_SECRET}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${KORA_SECRET}`, "Content-Type": "application/json" },
       body: JSON.stringify(koraPayload),
     });
 
     const koraJson = await koraRes.json();
-    console.log("Korapay response status:", koraJson?.status, "message:", koraJson?.message);
+    console.log("Korapay response:", koraJson?.status, koraJson?.message);
 
     if (!koraJson?.status || !koraJson?.data?.checkout_url) {
-      throw new Error(`Korapay: ${koraJson?.message || "No checkout_url in response"}`);
+      throw new Error(`Korapay: ${koraJson?.message || "No checkout_url returned"}`);
     }
 
     return new Response(
-      JSON.stringify({
-        payment_link: koraJson.data.checkout_url,
-        order_id: order.id,
-        order_number: order.order_number,
-      }),
+      JSON.stringify({ payment_link: koraJson.data.checkout_url, order_id: order.id, order_number: order.order_number }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
