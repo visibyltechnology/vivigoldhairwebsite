@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sb as supabase } from "@/integrations/supabase/admin-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Edit, Trash2, Plus, Search } from "lucide-react";
+import { Edit, Trash2, Plus, Search, X, Upload, Loader2 } from "lucide-react";
 
 interface ProductRow {
   id: string;
@@ -26,14 +26,18 @@ interface ProductRow {
 }
 
 interface Editing extends Partial<ProductRow> {
-  base_price?: number; // single price field driven by base_currency
+  base_price?: number;
 }
+
+const BUCKET = "product-images";
 
 export const ProductsTab = ({ rate }: { rate: number }) => {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [search, setSearch] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
@@ -90,6 +94,57 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !editing) return;
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    const newUrls: string[] = [];
+
+    for (const file of files) {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!["png", "jpg", "jpeg", "webp"].includes(ext || "")) {
+        toast.error(`${file.name} is not a supported image type`);
+        continue;
+      }
+
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from(BUCKET).upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+      if (error) {
+        toast.error(`Failed to upload ${file.name}: ${error.message}`);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+      if (urlData?.publicUrl) {
+        newUrls.push(urlData.publicUrl);
+      }
+    }
+
+    if (newUrls.length > 0) {
+      setEditing((prev) => ({
+        ...prev,
+        images: [...(prev?.images || []), ...newUrls],
+      }));
+      toast.success(`${newUrls.length} image${newUrls.length > 1 ? "s" : ""} uploaded`);
+    }
+
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeImage = (index: number) => {
+    setEditing((prev) => ({
+      ...prev,
+      images: (prev?.images || []).filter((_, i) => i !== index),
+    }));
+  };
+
   const saveProduct = async () => {
     if (!editing) return;
     if (!editing.name) return toast.error("Name is required");
@@ -142,7 +197,6 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
     else load();
   };
 
-  // live preview of converted price
   const preview = editing
     ? computePrices((editing.base_currency || "NGN") as "NGN" | "USD", Number(editing.base_price || 0))
     : null;
@@ -182,7 +236,7 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                  No products yet — click “New product”.
+                  No products yet — click "New product".
                 </td>
               </tr>
             )}
@@ -356,27 +410,65 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
               </div>
 
               <div className="col-span-2">
-                <Label>Image URLs (comma separated)</Label>
-                <Input
-                  value={(editing.images || []).join(",")}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      images: e.target.value
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                  className="bg-input mt-2"
+                <Label>Product Images</Label>
+                <p className="text-xs text-muted-foreground mt-1 mb-2">
+                  Accepted formats: PNG, JPG, JPEG, WebP. You can select multiple files at once.
+                </p>
+
+                <div
+                  className="border-2 border-dashed border-border rounded-sm p-6 text-center cursor-pointer hover:border-primary transition-colors mt-2"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploading ? (
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Loader2 className="size-6 animate-spin" />
+                      <span className="text-sm">Uploading…</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Upload className="size-6" />
+                      <span className="text-sm">Click to select image files</span>
+                      <span className="text-xs">PNG, JPG, JPEG, WebP</span>
+                    </div>
+                  )}
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileUpload}
                 />
+
+                {(editing.images || []).length > 0 && (
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {(editing.images || []).map((url, i) => (
+                      <div key={i} className="relative group aspect-square">
+                        <img
+                          src={url}
+                          alt={`Product image ${i + 1}`}
+                          className="w-full h-full object-cover border border-border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(i)}
+                          className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-6 justify-end">
               <Button variant="luxe" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
-              <Button variant="gold" onClick={saveProduct}>
+              <Button variant="gold" onClick={saveProduct} disabled={uploading}>
                 Save
               </Button>
             </div>
