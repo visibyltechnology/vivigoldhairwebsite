@@ -229,7 +229,7 @@ export const InstallmentsTab = () => {
                                 <th className="text-right p-2">Amount</th>
                                 <th className="text-left p-2">Status</th>
                                 <th className="text-left p-2">Paid at</th>
-                                <th className="text-left p-2">FLW Ref</th>
+                                <th className="text-left p-2">Korapay Ref</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
@@ -239,7 +239,7 @@ export const InstallmentsTab = () => {
                                   <td className="p-2 text-right">{sym(c)}{Number(p.amount).toLocaleString()}</td>
                                   <td className="p-2">{p.status}</td>
                                   <td className="p-2">{p.paid_at ? new Date(p.paid_at).toLocaleString() : "—"}</td>
-                                  <td className="p-2 truncate max-w-[160px]">{p.flutterwave_tx_ref ?? "—"}</td>
+                                  <td className="p-2 truncate max-w-[160px] font-mono text-[10px]">{p.flutterwave_tx_ref ?? "—"}</td>
                                 </tr>
                               ))}
                               {(payments[r.id]?.length ?? 0) === 0 && (
