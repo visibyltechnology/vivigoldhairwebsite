@@ -1,11 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sb as supabase } from "@/integrations/supabase/admin-client";
+import
+
+    const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files?.[0] || !editing) return;
+      const file = e.target.files[0];
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!["mp4", "mov", "webm", "m4v"].includes(ext || "")) {
+        toast.error("Supported formats: MP4, MOV, WebM");
+        return;
+      }
+      setVideoUploading(true);
+      const fileName = `video-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from(BUCKET).upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+      if (error) {
+        toast.error(`Video upload failed: ${error.message}`);
+      } else {
+        const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+        if (urlData?.publicUrl) {
+          setEditing((prev) => ({ ...prev, video_url: urlData.publicUrl }));
+          toast.success("Video uploaded");
+        }
+      }
+      setVideoUploading(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }; { sb as supabase } from "@/integrations/supabase/admin-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Edit, Trash2, Plus, Search, X, Upload, Loader2 } from "lucide-react";
+import { Edit, Trash2, Plus, Search, X, Upload, Loader2, Video, VideoOff } from "lucide-react";
 
 interface ProductRow {
   id: string;
@@ -20,6 +47,7 @@ interface ProductRow {
   price_usd: number;
   stock: number;
   images: string[];
+  video_url: string | null;
   featured: boolean;
   active: boolean;
   category_id: string | null;
@@ -37,7 +65,9 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
@@ -164,6 +194,7 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
       price_usd,
       stock: editing.stock || 0,
       images: editing.images || [],
+      video_url: editing.video_url ?? null,
       featured: editing.featured || false,
       active: editing.active ?? true,
       category_id: editing.category_id || null,
@@ -464,6 +495,51 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
                 )}
               </div>
             </div>
+
+                {/* ── Product Video (optional) ── */}
+                <div className="col-span-2 mt-4">
+                  <Label>Product Video <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    Short clip showing texture or styling. MP4, MOV or WebM recommended.
+                  </p>
+                  {editing.video_url ? (
+                    <div className="space-y-2">
+                      <video src={editing.video_url} controls className="w-full max-h-48 border border-border bg-black object-contain" />
+                      <button
+                        type="button"
+                        onClick={() => setEditing((prev) => ({ ...prev, video_url: null }))}
+                        className="flex items-center gap-1 text-xs text-destructive hover:underline"
+                      >
+                        <VideoOff className="size-3" /> Remove video
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      className="border-2 border-dashed border-border rounded-sm p-5 text-center cursor-pointer hover:border-primary transition-colors"
+                      onClick={() => videoInputRef.current?.click()}
+                    >
+                      {videoUploading ? (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Loader2 className="size-5 animate-spin" />
+                          <span className="text-sm">Uploading video…</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Video className="size-5" />
+                          <span className="text-sm">Click to upload a product video</span>
+                          <span className="text-xs">MP4 · MOV · WebM</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+                    className="hidden"
+                    onChange={handleVideoUpload}
+                  />
+                </div>
             <div className="flex gap-3 mt-6 justify-end">
               <Button variant="luxe" onClick={() => setEditing(null)}>
                 Cancel
