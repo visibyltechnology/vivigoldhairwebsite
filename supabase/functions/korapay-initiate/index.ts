@@ -260,7 +260,24 @@ interface InitPayload {
       throw new Error(`Korapay: ${koraJson?.message || "No checkout_url returned"}`);
     }
 
-    return new Response(
+        // Fire order confirmation email (non-blocking)
+      sendOrderConfirmation(
+        {
+          order_number: order.order_number,
+          customer_name: body.customer.name,
+          customer_email: body.customer.email,
+          currency: body.currency,
+          total,
+          subtotal,
+          shipping_fee: body.shipping_fee || 0,
+          is_installment: !!body.is_installment,
+        },
+        body.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        firstAmount,
+        parts,
+      ).catch(() => {});
+
+      return new Response(
       JSON.stringify({ payment_link: koraJson.data.checkout_url, order_id: order.id, order_number: order.order_number }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
