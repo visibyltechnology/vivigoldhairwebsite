@@ -1,20 +1,4 @@
-import { useEffect, 
-
-    // Validate cart items against live products table
-    useEffect(() => {
-      if (items.length === 0) { setValidatingCart(false); return; }
-      const ids = items.map((i) => i.id);
-      supabase
-        .from("products")
-        .select("id")
-        .in("id", ids)
-        .then(({ data }) => {
-          const existingIds = new Set((data || []).map((p: { id: string }) => p.id));
-          setStaleItems(ids.filter((id) => !existingIds.has(id)));
-          setValidatingCart(false);
-        })
-        .catch(() => setValidatingCart(false));
-    }, [items]);useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -81,6 +65,21 @@ const Checkout = () => {
         }
       });
   }, []);
+
+    useEffect(() => {
+      if (items.length === 0) { setValidatingCart(false); return; }
+      const ids = items.map((i) => i.id);
+      supabase
+        .from("products")
+        .select("id")
+        .in("id", ids)
+        .then(({ data }) => {
+          const existingIds = new Set((data || []).map((p: { id: string }) => p.id));
+          setStaleItems(ids.filter((id) => !existingIds.has(id)));
+          setValidatingCart(false);
+        })
+        .catch(() => setValidatingCart(false));
+    }, [items]);
 
   if (items.length === 0) {
     return (
