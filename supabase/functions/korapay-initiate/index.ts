@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("korapay-initiate error:", msg);
     return new Response(JSON.stringify({ error: msg }), {
-      status: 400,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
