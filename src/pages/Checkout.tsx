@@ -1,4 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, 
+
+    // Validate cart items against live products table
+    useEffect(() => {
+      if (items.length === 0) { setValidatingCart(false); return; }
+      const ids = items.map((i) => i.id);
+      supabase
+        .from("products")
+        .select("id")
+        .in("id", ids)
+        .then(({ data }) => {
+          const existingIds = new Set((data || []).map((p: { id: string }) => p.id));
+          setStaleItems(ids.filter((id) => !existingIds.has(id)));
+          setValidatingCart(false);
+        })
+        .catch(() => setValidatingCart(false));
+    }, [items]);useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -11,7 +27,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CreditCard, Loader2, Lock, ShoppingBag } from "lucide-react";
+import { AlertTriangle, CreditCard, Loader2, Lock, ShoppingBag, X } from "lucide-react";
 
 const SHIPPING_FEES = { NGN: 5000, USD: 15 };
 
@@ -21,7 +37,7 @@ interface GatewayState {
 }
 
 const Checkout = () => {
-  const { items, subtotalNgn, subtotalUsd, clear } = useCart();
+  const { items, subtotalNgn, subtotalUsd, clear, remove } = useCart();
   const { currency, format } = useCurrency();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -30,6 +46,8 @@ const Checkout = () => {
   const [parts, setParts] = useState<"1" | "2" | "3" | "4">("1");
   const [selectedGateway, setSelectedGateway] = useState<"flutterwave" | "korapay">("flutterwave");
   const [gateways, setGateways] = useState<GatewayState>({ flutterwave: true, korapay: false });
+    const [staleItems, setStaleItems] = useState<string[]>([]);
+    const [validatingCart, setValidatingCart] = useState(true);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -306,8 +324,31 @@ const Checkout = () => {
                 <p className="text-xs text-muted-foreground mt-1">Then {partsNum - 1} more payment{partsNum > 2 ? "s" : ""} of similar amount.</p>
               </div>
             )}
-            <Button variant="gold" size="lg" className="w-full" onClick={handlePay} disabled={loading}>
-              {loading ? <><Loader2 className="size-4 animate-spin" /> Redirecting…</> : <><Lock className="size-4" /> Pay with {gatewayLabel}</>}
+            {/* Stale cart items warning */}
+          {staleItems.length > 0 && (
+            <div className="border border-destructive/40 bg-destructive/5 p-4 mb-4">
+              <p className="text-sm font-semibold text-destructive flex items-center gap-2 mb-3">
+                <AlertTriangle className="size-4 flex-shrink-0" />
+                Some items are no longer available
+              </p>
+              <div className="space-y-2">
+                {items.filter((i) => staleItems.includes(i.id)).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground line-through line-clamp-1 flex-1">{item.name}</span>
+                    <button
+                      onClick={() => remove(item.id)}
+                      className="flex items-center gap-1 text-destructive hover:text-destructive/80 text-xs font-medium flex-shrink-0"
+                    >
+                      <X className="size-3" /> Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">Remove unavailable items to continue.</p>
+            </div>
+          )}
+          <Button variant="gold" size="lg" className="w-full" onClick={handlePay} disabled={loading || validatingCart || staleItems.length > 0}>
+              {loading || validatingCart ? <><Loader2 className="size-4 animate-spin" /> {validatingCart ? "Checking cart…" : "Redirecting…"}</> : <><Lock className="size-4" /> Pay with {gatewayLabel}</>}
             </Button>
             <p className="text-[11px] text-muted-foreground text-center mt-3">
               Secured by {gatewaySubtext}
