@@ -126,7 +126,15 @@ const Checkout = () => {
 
       const fnName = selectedGateway === "korapay" ? "korapay-initiate" : "flutterwave-initiate";
       const { data, error } = await supabase.functions.invoke(fnName, { body: payload });
-      if (error) throw error;
+      if (error) {
+        let errMsg = error.message;
+        try {
+          const ctx = (error as any)?.context;
+          const body = ctx && typeof ctx.json === "function" ? await ctx.json() : ctx;
+          if (body?.error) errMsg = body.error;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
       if (!data?.payment_link) throw new Error(data?.error || "No payment link returned");
 
       sessionStorage.setItem("vg_pending_order", data.order_id);
