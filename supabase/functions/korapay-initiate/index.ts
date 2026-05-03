@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
       notification_url: `${SUPABASE_FUNCTIONS_URL}/korapay-webhook`,
       redirect_url: `${origin}/order-success?order_id=${order.id}`,
       customer: { name: body.customer.name, email: body.customer.email },
-      channels: ["card", "bank_transfer", "ussd"],
+      channels: ["card", "bank_transfer", "pay_with_bank"],
       metadata: {
         order_id: order.id,
         order_number: order.order_number,
