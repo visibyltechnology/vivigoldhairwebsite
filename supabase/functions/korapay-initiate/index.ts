@@ -47,7 +47,111 @@ interface InitPayload {
   installment_parts?: 1 | 2 | 3 | 4;
 }
 
-Deno.serve(async (req) => {
+
+  async function sendOrderConfirmation(order: {
+    order_number: string;
+    customer_name: string;
+    customer_email: string;
+    currency: string;
+    total: number;
+    subtotal: number;
+    shipping_fee: number;
+    is_installment: boolean;
+  }, items: Array<{ name: string; quantity: number; price: number }>, firstAmount: number, parts: number) {
+    const RESEND_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
+    const FROM = Deno.env.get("REMINDER_FROM_EMAIL") ?? "Vivygold Hair <onboarding@resend.dev>";
+    if (!RESEND_KEY) return;
+
+    const sym = order.currency === "NGN" ? "₦" : "$";
+    const fmt = (n: number) => sym + Number(n).toLocaleString("en-NG");
+
+    const itemRows = items.map(i =>
+      `<tr>
+        <td style="padding:12px 16px;font-size:14px;color:#1a1a1a;border-bottom:1px solid #e8e4de;">${i.name}</td>
+        <td style="padding:12px 16px;font-size:14px;color:#555;text-align:center;border-bottom:1px solid #e8e4de;">${i.quantity}</td>
+        <td style="padding:12px 16px;font-size:14px;color:#1a1a1a;text-align:right;border-bottom:1px solid #e8e4de;">${fmt(i.price * i.quantity)}</td>
+      </tr>`
+    ).join("");
+
+    const installmentNote = order.is_installment && parts > 1
+      ? `<p style="margin:16px 0 0;font-size:14px;color:#555;line-height:1.6;">
+          You chose <strong>Pay Small Small</strong> — ${parts} instalments of <strong>${fmt(firstAmount)}</strong> each.
+          Your first payment of ${fmt(firstAmount)} is due now.
+        </p>`
+      : "";
+
+    const html = `<!DOCTYPE html>
+  <html>
+  <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+  <body style="margin:0;padding:0;background:#f6f4f0;font-family:'Georgia',serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f4f0;padding:40px 0;">
+      <tr><td align="center">
+        <table width="580" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:4px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="background:#1a1a1a;padding:28px 40px;text-align:center;">
+              <span style="color:#c9a96e;font-size:11px;letter-spacing:0.3em;text-transform:uppercase;font-family:sans-serif;">Vivygold Hair</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 40px 32px;">
+              <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#c9a96e;font-family:sans-serif;">Order Confirmed</p>
+              <h1 style="margin:0 0 8px;font-size:28px;color:#1a1a1a;font-weight:normal;">Thank you, ${order.customer_name.split(" ")[0]}!</h1>
+              <p style="margin:0 0 28px;font-size:13px;color:#888;font-family:sans-serif;letter-spacing:0.1em;">Order <strong style="color:#1a1a1a;">${order.order_number}</strong></p>
+              <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.6;">
+                We've received your order and will begin processing it once payment is confirmed. You'll hear from us soon.
+              </p>
+              <!-- Items -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8e4de;border-radius:4px;overflow:hidden;margin-bottom:24px;">
+                <thead>
+                  <tr style="background:#faf9f7;">
+                    <th style="padding:12px 16px;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#888;font-family:sans-serif;text-align:left;">Item</th>
+                    <th style="padding:12px 16px;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#888;font-family:sans-serif;text-align:center;">Qty</th>
+                    <th style="padding:12px 16px;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#888;font-family:sans-serif;text-align:right;">Price</th>
+                  </tr>
+                </thead>
+                <tbody>${itemRows}</tbody>
+              </table>
+              <!-- Totals -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+                <tr>
+                  <td style="font-size:13px;color:#888;padding:4px 0;">Subtotal</td>
+                  <td style="font-size:13px;color:#555;text-align:right;padding:4px 0;">${fmt(order.subtotal)}</td>
+                </tr>
+                <tr>
+                  <td style="font-size:13px;color:#888;padding:4px 0;">Shipping</td>
+                  <td style="font-size:13px;color:#555;text-align:right;padding:4px 0;">${fmt(order.shipping_fee)}</td>
+                </tr>
+                <tr style="border-top:1px solid #e8e4de;">
+                  <td style="font-size:16px;color:#1a1a1a;font-weight:bold;padding:12px 0 4px;">Total</td>
+                  <td style="font-size:16px;color:#1a1a1a;font-weight:bold;text-align:right;padding:12px 0 4px;">${fmt(order.total)}</td>
+                </tr>
+              </table>
+              ${installmentNote}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#faf9f7;padding:20px 40px;text-align:center;border-top:1px solid #e8e4de;">
+              <p style="margin:0;font-size:11px;color:#aaa;font-family:sans-serif;">Questions? Reply to this email or WhatsApp us · Vivygold Hair</p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+  </html>`;
+
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: FROM, to: order.customer_email, subject: `Your Vivygold order ${order.order_number} is confirmed`, html }),
+      });
+    } catch (e) {
+      console.error("order confirmation email failed:", e);
+    }
+  }
+
+  Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
