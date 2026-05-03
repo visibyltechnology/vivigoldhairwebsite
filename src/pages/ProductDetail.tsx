@@ -8,7 +8,7 @@ import { useCart } from "@/contexts/CartContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Button } from "@/components/ui/button";
-import { Heart, Minus, Plus, Star, ShoppingBag, Truck, Shield, CreditCard, ArrowLeft } from "lucide-react";
+import { Heart, Minus, Plus, Star, ShoppingBag, Truck, Shield, CreditCard, ArrowLeft, ImageOff, PlayCircle } from "lucide-react";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -23,6 +23,8 @@ const ProductDetail = () => {
   const [activeImg, setActiveImg] = useState(0);
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState("");
+  const [imgErrors, setImgErrors] = useState<Set<number>>(new Set());
+  const [showVideo, setShowVideo] = useState(false);
   const { add } = useCart();
   const { toggle, isWished } = useWishlist();
   const { format, currency } = useCurrency();
@@ -30,7 +32,7 @@ const ProductDetail = () => {
 
   useEffect(() => {
     if (!slug) return;
-    setQty(1); setActiveImg(0);
+    setQty(1); setActiveImg(0); setShowVideo(false); setImgErrors(new Set());
     supabase.from("products").select("*").eq("slug", slug).maybeSingle()
       .then(({ data }) => {
         if (data) {
@@ -83,33 +85,67 @@ const ProductDetail = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="relative aspect-[4/5] bg-card overflow-hidden cursor-zoom-in group"
+            className={`relative aspect-[4/5] bg-card overflow-hidden ${showVideo ? "" : "cursor-zoom-in"} group`}
             onMouseMove={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
               setZoomPos({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 });
             }}
             onMouseLeave={() => setZoomPos(null)}
           >
-            <img
-              src={img}
-              alt={product.name}
-              className="size-full object-cover transition-transform duration-500"
-              style={zoomPos ? { transform: "scale(2)", transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` } : undefined}
-            />
+            {showVideo && product.video_url ? (
+                <video
+                  src={product.video_url}
+                  controls
+                  autoPlay
+                  className="size-full object-contain bg-black"
+                />
+              ) : imgErrors.has(activeImg) ? (
+                <div className="size-full flex flex-col items-center justify-center bg-muted gap-3">
+                  <ImageOff className="size-10 text-muted-foreground/40" strokeWidth={1} />
+                  <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground/60">Image unavailable</span>
+                </div>
+              ) : (
+                <img
+                  src={img}
+                  alt={product.name}
+                  onError={() => setImgErrors((prev) => new Set(prev).add(activeImg))}
+                  className="size-full object-cover transition-transform duration-500"
+                  style={zoomPos ? { transform: "scale(2)", transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` } : undefined}
+                />
+              )}
           </motion.div>
-          {images.length > 1 && (
-            <div className="grid grid-cols-5 gap-2">
-              {images.map((im, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveImg(i)}
-                  className={`aspect-square overflow-hidden ${activeImg === i ? "ring-1 ring-primary" : "opacity-60"}`}
-                >
-                  <img src={resolveImage(im)} alt="" className="size-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
+           {(images.length > 1 || product.video_url) && (
+              <div className="grid grid-cols-5 gap-2">
+                {images.map((im, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setActiveImg(i); setShowVideo(false); }}
+                    className={`aspect-square overflow-hidden ${!showVideo && activeImg === i ? "ring-1 ring-primary" : "opacity-60"}`}
+                  >
+                    {imgErrors.has(i) ? (
+                      <div className="size-full bg-muted flex items-center justify-center">
+                        <ImageOff className="size-4 text-muted-foreground/40" strokeWidth={1} />
+                      </div>
+                    ) : (
+                      <img
+                        src={resolveImage(im)}
+                        alt=""
+                        onError={() => setImgErrors((prev) => new Set(prev).add(i))}
+                        className="size-full object-cover"
+                      />
+                    )}
+                  </button>
+                ))}
+                {product.video_url && (
+                  <button
+                    onClick={() => setShowVideo(true)}
+                    className={`aspect-square overflow-hidden bg-black/80 flex items-center justify-center ${showVideo ? "ring-1 ring-primary" : "opacity-60"}`}
+                  >
+                    <PlayCircle className="size-6 text-white" />
+                  </button>
+                )}
+              </div>
+            )}
         </div>
 
         <div className="lg:py-8">
