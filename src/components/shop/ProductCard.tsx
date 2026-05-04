@@ -1,6 +1,6 @@
 import { useState } from "react";
   import { Link } from "react-router-dom";
-  import { Heart, ShoppingBag, ImageOff } from "lucide-react";
+  import { Heart, ShoppingBag, ImageOff, PlayCircle } from "lucide-react";
   import { motion } from "framer-motion";
   import { Product, resolveImage } from "@/lib/products";
   import { useCart } from "@/contexts/CartContext";
@@ -76,7 +76,13 @@ import { useState } from "react";
             >
               <Heart className={`size-4 ${wished ? "fill-current" : ""}`} />
             </button>
-            <div className="absolute inset-x-3 bottom-3 z-20 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 ease-luxe">
+            {product.video_url && (
+                <span className="absolute bottom-3 left-3 z-20 flex items-center gap-1 bg-black/70 text-white text-[9px] tracking-[0.15em] uppercase px-2 py-1 backdrop-blur-sm pointer-events-none">
+                  <PlayCircle className="size-3" />
+                  Video
+                </span>
+              )}
+              <div className="absolute inset-x-3 bottom-3 z-20 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 ease-luxe">
               <Button onClick={onAdd} variant="gold" size="sm" className="w-full">
                 <ShoppingBag className="size-3" /> Add to bag
               </Button>
