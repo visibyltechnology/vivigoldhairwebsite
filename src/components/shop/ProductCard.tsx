@@ -54,7 +54,7 @@ import { useState } from "react";
                 alt={product.name}
                 loading="lazy"
                 onError={() => setImgFailed(true)}
-                className="size-full object-cover transition-transform duration-1000 ease-luxe group-hover:scale-110"
+                className={`size-full object-cover transition-transform duration-1000 ease-luxe group-hover:scale-110 ${product.stock === 0 ? "opacity-50 grayscale" : ""}`}
               />
             )}
             {compare && (
@@ -81,7 +81,14 @@ import { useState } from "react";
             >
               <Heart className={`size-4 ${wished ? "fill-current" : ""}`} />
             </button>
-            {product.video_url && (
+            {product.stock === 0 && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 pointer-events-none">
+                  <span className="text-white text-[10px] tracking-[0.25em] uppercase border border-white/70 px-3 py-1.5 backdrop-blur-sm">
+                    Out of Stock
+                  </span>
+                </div>
+              )}
+              {product.video_url && (
                 <span className="absolute bottom-3 left-3 z-20 flex items-center gap-1 bg-black/70 text-white text-[9px] tracking-[0.15em] uppercase px-2 py-1 backdrop-blur-sm pointer-events-none">
                   <PlayCircle className="size-3" />
                   Video
