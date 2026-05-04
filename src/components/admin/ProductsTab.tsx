@@ -494,53 +494,53 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
                   </div>
                 )}
               </div>
-            </div>
 
-                {/* ── Product Video (optional) ── */}
-                <div className="col-span-2 mt-4">
-                  <Label>Product Video <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
-                  <p className="text-xs text-muted-foreground mt-1 mb-2">
-                    Short clip showing texture or styling. MP4, MOV or WebM recommended.
-                  </p>
-                  {editing.video_url ? (
-                    <div className="space-y-2">
-                      <video src={editing.video_url} controls className="w-full max-h-48 border border-border bg-black object-contain" />
-                      <button
-                        type="button"
-                        onClick={() => setEditing((prev) => ({ ...prev, video_url: null }))}
-                        className="flex items-center gap-1 text-xs text-destructive hover:underline"
-                      >
-                        <VideoOff className="size-3" /> Remove video
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      className="border-2 border-dashed border-border rounded-sm p-5 text-center cursor-pointer hover:border-primary transition-colors"
-                      onClick={() => videoInputRef.current?.click()}
+              {/* ── Product Video (optional) ── */}
+              <div className="col-span-2 mt-4">
+                <Label>Product Video <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
+                <p className="text-xs text-muted-foreground mt-1 mb-2">
+                  Short clip showing texture or styling. MP4, MOV or WebM recommended.
+                </p>
+                {editing.video_url ? (
+                  <div className="space-y-2">
+                    <video src={editing.video_url} controls className="w-full max-h-48 border border-border bg-black object-contain" />
+                    <button
+                      type="button"
+                      onClick={() => setEditing((prev) => ({ ...prev, video_url: null }))}
+                      className="flex items-center gap-1 text-xs text-destructive hover:underline"
                     >
-                      {videoUploading ? (
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                          <Loader2 className="size-5 animate-spin" />
-                          <span className="text-sm">Uploading video…</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                          <Video className="size-5" />
-                          <span className="text-sm">Click to upload a product video</span>
-                          <span className="text-xs">MP4 · MOV · WebM</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
-                    className="hidden"
-                    onChange={handleVideoUpload}
-                  />
-                </div>
-            <div className="flex gap-3 mt-6 justify-end">
+                      <VideoOff className="size-3" /> Remove video
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="border-2 border-dashed border-border rounded-sm p-5 text-center cursor-pointer hover:border-primary transition-colors"
+                    onClick={() => videoInputRef.current?.click()}
+                  >
+                    {videoUploading ? (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Loader2 className="size-5 animate-spin" />
+                        <span className="text-sm">Uploading video…</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Video className="size-5" />
+                        <span className="text-sm">Click to upload a product video</span>
+                        <span className="text-xs">MP4 · MOV · WebM</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+                  className="hidden"
+                  onChange={handleVideoUpload}
+                />
+              </div>
+            </div>
+                        <div className="flex gap-3 mt-6 justify-end">
               <Button variant="luxe" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
