@@ -207,6 +207,11 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
     if (error) toast.error(error.message);
     else {
       toast.success(editing.id ? "Product updated" : "Product created");
+      if (typeof payload.stock === "number" && payload.stock <= 5) {
+        supabase.functions.invoke("low-stock-alert", {
+          body: { name: payload.name, stock: payload.stock, product_id: editing.id ?? null },
+        }).catch(() => { /* non-critical */ });
+      }
       setEditing(null);
       load();
     }
