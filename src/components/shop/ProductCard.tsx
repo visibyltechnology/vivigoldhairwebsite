@@ -67,6 +67,11 @@ import { useState } from "react";
                 Signature
               </span>
             )}
+            {product.stock > 0 && product.stock <= 5 && (
+                <span className="absolute top-10 left-3 z-20 bg-destructive text-white text-[9px] tracking-[0.15em] uppercase px-2.5 py-1 pointer-events-none">
+                  Only {product.stock} left
+                </span>
+              )}
             <button
               onClick={(e) => { e.preventDefault(); toggle(product.id, product.name); }}
               aria-label="Wishlist"
