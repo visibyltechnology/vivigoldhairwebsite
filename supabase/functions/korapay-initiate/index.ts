@@ -211,7 +211,8 @@ interface InitPayload {
     if (itemsErr) throw new Error(itemsErr.message);
 
     const parts = body.is_installment ? Math.max(1, Math.min(4, body.installment_parts ?? 1)) : 1;
-    const firstAmount = body.is_installment ? Math.ceil(total / parts) : total;
+    // Use floor division — no interest or rounding surcharge on the first payment
+    const firstAmount = body.is_installment ? Math.floor(total / parts) : total;
 
     if (body.is_installment && parts > 1 && userId) {
       await supabase.from("installments").insert({
