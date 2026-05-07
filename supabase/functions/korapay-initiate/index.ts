@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const SUPABASE_FUNCTIONS_URL = "https://iivgirvlatkcwklflmzc.supabase.co/functions/v1";
+const KORAPAY_MAX_AMOUNT = 200_000;
 
 const adminClient = () =>
   createClient(
@@ -210,10 +211,17 @@ Deno.serve(async (req) => {
 
     const parts = body.is_installment ? Math.max(1, Math.min(4, body.installment_parts ?? 1)) : 1;
 
-    // Apply interest rate when splitting into installments
     const interestRatePct = body.is_installment && parts > 1 ? (body.installment_interest_rate_pct ?? 0) : 0;
     const installmentTotal = interestRatePct > 0 ? Math.round(total * (1 + interestRatePct / 100)) : total;
     const firstAmount = body.is_installment ? Math.floor(installmentTotal / parts) : total;
+
+    // Hard guard: Korapay does not process NGN payments above ₦200,000
+    if (body.currency === "NGN" && firstAmount > KORAPAY_MAX_AMOUNT) {
+      throw new Error(
+        `This payment (₦${firstAmount.toLocaleString()}) exceeds Korapay's ₦200,000 per-transaction limit. ` +
+        `Please use Flutterwave, or choose a 3 or 4-part instalment plan to bring each payment under the limit.`
+      );
+    }
 
     if (body.is_installment && parts > 1 && userId) {
       await supabase.from("installments").insert({
@@ -262,7 +270,6 @@ Deno.serve(async (req) => {
       throw new Error(`Korapay: ${koraJson?.message || "No checkout_url returned"}`);
     }
 
-    // Fire order confirmation email (non-blocking)
     sendOrderConfirmation(
       {
         order_number: order.order_number,
