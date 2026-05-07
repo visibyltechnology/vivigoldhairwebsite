@@ -71,7 +71,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
       const paidAmount = Number(inst.paid_amount);
       const remaining = Number(inst.remaining_amount);
 
-      const perPart = Math.ceil(totalAmount / totalParts);
+      // Use floor division — no interest or rounding surcharge on any payment
+      const perPart = Math.floor(totalAmount / totalParts);
       const partsPaid = paidAmount > 0 ? Math.round(paidAmount / perPart) : 0;
       const nextPart = partsPaid + 1;
       const nextAmount = Math.min(perPart, remaining);
