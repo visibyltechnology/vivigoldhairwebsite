@@ -31,6 +31,7 @@ interface Editing extends Partial<ProductRow> {
 }
 
 const BUCKET = "product-images";
+const VIDEO_BUCKET = "product-videos";
 
 export const ProductsTab = ({ rate }: { rate: number }) => {
   const [products, setProducts] = useState<ProductRow[]>([]);
@@ -116,6 +117,7 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
       const { error } = await supabase.storage.from(BUCKET).upload(fileName, file, {
         cacheControl: "3600",
         upsert: false,
+        contentType: file.type,
       });
 
       if (error) {
@@ -151,14 +153,22 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
     }
     setVideoUploading(true);
     const fileName = `video-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(fileName, file, {
+    const mimeMap: Record<string, string> = {
+      mp4: "video/mp4",
+      mov: "video/quicktime",
+      webm: "video/webm",
+      m4v: "video/x-m4v",
+    };
+    const contentType = file.type || mimeMap[ext || ""] || "video/mp4";
+    const { error } = await supabase.storage.from(VIDEO_BUCKET).upload(fileName, file, {
       cacheControl: "3600",
       upsert: false,
+      contentType,
     });
     if (error) {
       toast.error(`Video upload failed: ${error.message}`);
     } else {
-      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+      const { data: urlData } = supabase.storage.from(VIDEO_BUCKET).getPublicUrl(fileName);
       if (urlData?.publicUrl) {
         setEditing((prev) => ({ ...prev, video_url: urlData.publicUrl }));
         toast.success("Video uploaded");
