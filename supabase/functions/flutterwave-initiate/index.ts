@@ -9,7 +9,7 @@ interface CartLine {
   product_id: string;
   name: string;
   image: string;
-  price: number; // unit price in selected currency
+  price: number;
   quantity: number;
 }
 
@@ -21,6 +21,7 @@ interface InitPayload {
   shipping_fee: number;
   is_installment: boolean;
   installment_parts?: 1 | 2 | 3 | 4;
+  installment_interest_rate_pct?: number;
 }
 
 Deno.serve(async (req) => {
@@ -86,16 +87,19 @@ Deno.serve(async (req) => {
     if (itemsErr) throw new Error(itemsErr.message);
 
     const parts = body.is_installment ? Math.max(1, Math.min(4, body.installment_parts ?? 1)) : 1;
-    // Use floor division — no interest or rounding surcharge on the first payment
-    const firstAmount = body.is_installment ? Math.floor(total / parts) : total;
+
+    // Apply interest rate when splitting into installments
+    const interestRatePct = body.is_installment && parts > 1 ? (body.installment_interest_rate_pct ?? 0) : 0;
+    const installmentTotal = interestRatePct > 0 ? Math.round(total * (1 + interestRatePct / 100)) : total;
+    const firstAmount = body.is_installment ? Math.floor(installmentTotal / parts) : total;
 
     if (body.is_installment && parts > 1 && userId) {
       await supabase.from("installments").insert({
         user_id: userId,
         order_id: order.id,
-        total_amount: total,
+        total_amount: installmentTotal,
         paid_amount: 0,
-        remaining_amount: total,
+        remaining_amount: installmentTotal,
         total_parts: parts,
         status: "active",
       });
