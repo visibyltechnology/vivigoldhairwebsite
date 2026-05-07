@@ -97,7 +97,7 @@ const Checkout = () => {
   const shippingFee = SHIPPING_FEES[currency];
   const total = subtotal + shippingFee;
   const partsNum = Number(parts);
-  const firstPay = partsNum > 1 ? Math.ceil(total / partsNum) : total;
+  const firstPay = partsNum > 1 ? Math.floor(total / partsNum) : total;
 
   const enabledCount = (gateways.flutterwave ? 1 : 0) + (gateways.korapay ? 1 : 0);
   const showGatewayPicker = enabledCount > 1;
