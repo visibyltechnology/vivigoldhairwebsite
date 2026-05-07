@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Eye, EyeOff, Save, KeyRound, ToggleLeft, ToggleRight } from "lucide-react";
+import { Eye, EyeOff, Save, KeyRound, ToggleLeft, ToggleRight, Percent } from "lucide-react";
 
 interface FlwKeys {
   public_key: string;
@@ -22,6 +22,12 @@ interface KorapayKeys {
 interface PaymentGateways {
   flutterwave: { enabled: boolean };
   korapay: { enabled: boolean };
+}
+
+interface InstallmentRates {
+  two_parts: number;
+  three_parts: number;
+  four_parts: number;
 }
 
 interface StoreInfo {
@@ -45,6 +51,11 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
   const [gateways, setGateways] = useState<PaymentGateways>({
     flutterwave: { enabled: true },
     korapay: { enabled: false },
+  });
+  const [installmentRates, setInstallmentRates] = useState<InstallmentRates>({
+    two_parts: 10,
+    three_parts: 20,
+    four_parts: 30,
   });
 
   const [showFlwSecret, setShowFlwSecret] = useState(false);
@@ -86,6 +97,12 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
           setGateways({
             flutterwave: { enabled: v?.flutterwave?.enabled ?? true },
             korapay: { enabled: v?.korapay?.enabled ?? false },
+          });
+        } else if (row.key === "installment_rates") {
+          setInstallmentRates({
+            two_parts: v?.two_parts ?? 10,
+            three_parts: v?.three_parts ?? 20,
+            four_parts: v?.four_parts ?? 30,
           });
         } else if (row.key === "exchange_rate") {
           setRate(v?.usd_to_ngn ?? 1650);
@@ -154,6 +171,16 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
     if (await upsertSetting("store_info", store)) toast.success("Store info updated");
   };
 
+  const saveInstallmentRates = async () => {
+    const two = Math.min(100, Math.max(0, Number(installmentRates.two_parts)));
+    const three = Math.min(100, Math.max(0, Number(installmentRates.three_parts)));
+    const four = Math.min(100, Math.max(0, Number(installmentRates.four_parts)));
+    if (await upsertSetting("installment_rates", { two_parts: two, three_parts: three, four_parts: four })) {
+      setInstallmentRates({ two_parts: two, three_parts: three, four_parts: four });
+      toast.success("Installment interest rates saved");
+    }
+  };
+
   const GatewayToggle = ({ id, label, logo, enabled }: { id: "flutterwave" | "korapay"; label: string; logo: string; enabled: boolean }) => (
     <div className={`flex items-center justify-between p-4 border ${enabled ? "border-primary/50 bg-primary/5" : "border-border bg-card"}`}>
       <div className="flex items-center gap-3">
@@ -205,6 +232,68 @@ export const SettingsTab = ({ onRateChange }: { onRateChange?: (n: number) => vo
             enabled={gateways.korapay.enabled}
           />
         </div>
+      </section>
+
+      {/* Installment interest rates */}
+      <section className="border border-border bg-card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Percent className="size-4 text-primary" />
+          <h3 className="font-display text-2xl">Installment interest rates</h3>
+        </div>
+        <p className="text-sm text-muted-foreground mb-5">
+          Interest charged on "Pay Small Small" orders. Applied on top of the order total before splitting into parts.
+          Leave at 0% for no interest.
+        </p>
+        <div className="grid md:grid-cols-3 gap-4 max-w-2xl">
+          <div>
+            <Label>2 payments interest (%)</Label>
+            <div className="relative mt-1">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={installmentRates.two_parts}
+                onChange={(e) => setInstallmentRates({ ...installmentRates, two_parts: Number(e.target.value) })}
+                className="bg-input pr-8"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">e.g. 10% → ÷2 plan costs 10% more</p>
+          </div>
+          <div>
+            <Label>3 payments interest (%)</Label>
+            <div className="relative mt-1">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={installmentRates.three_parts}
+                onChange={(e) => setInstallmentRates({ ...installmentRates, three_parts: Number(e.target.value) })}
+                className="bg-input pr-8"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">e.g. 20% → ÷3 plan costs 20% more</p>
+          </div>
+          <div>
+            <Label>4 payments interest (%)</Label>
+            <div className="relative mt-1">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={installmentRates.four_parts}
+                onChange={(e) => setInstallmentRates({ ...installmentRates, four_parts: Number(e.target.value) })}
+                className="bg-input pr-8"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">e.g. 30% → ÷4 plan costs 30% more</p>
+          </div>
+        </div>
+        <Button variant="gold" onClick={saveInstallmentRates} className="mt-5">
+          <Save className="size-3" /> Save interest rates
+        </Button>
       </section>
 
       {/* Flutterwave keys */}
