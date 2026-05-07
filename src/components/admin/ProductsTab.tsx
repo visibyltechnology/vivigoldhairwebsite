@@ -1,32 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import
-
-    const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!e.target.files?.[0] || !editing) return;
-      const file = e.target.files[0];
-      const ext = file.name.split(".").pop()?.toLowerCase();
-      if (!["mp4", "mov", "webm", "m4v"].includes(ext || "")) {
-        toast.error("Supported formats: MP4, MOV, WebM");
-        return;
-      }
-      setVideoUploading(true);
-      const fileName = `video-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from(BUCKET).upload(fileName, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-      if (error) {
-        toast.error(`Video upload failed: ${error.message}`);
-      } else {
-        const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
-        if (urlData?.publicUrl) {
-          setEditing((prev) => ({ ...prev, video_url: urlData.publicUrl }));
-          toast.success("Video uploaded");
-        }
-      }
-      setVideoUploading(false);
-      if (videoInputRef.current) videoInputRef.current.value = "";
-    }; { sb as supabase } from "@/integrations/supabase/admin-client";
+import { sb as supabase } from "@/integrations/supabase/admin-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -166,6 +139,33 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
 
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0] || !editing) return;
+    const file = e.target.files[0];
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!["mp4", "mov", "webm", "m4v"].includes(ext || "")) {
+      toast.error("Supported formats: MP4, MOV, WebM");
+      return;
+    }
+    setVideoUploading(true);
+    const fileName = `video-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from(BUCKET).upload(fileName, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (error) {
+      toast.error(`Video upload failed: ${error.message}`);
+    } else {
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+      if (urlData?.publicUrl) {
+        setEditing((prev) => ({ ...prev, video_url: urlData.publicUrl }));
+        toast.success("Video uploaded");
+      }
+    }
+    setVideoUploading(false);
+    if (videoInputRef.current) videoInputRef.current.value = "";
   };
 
   const removeImage = (index: number) => {
@@ -502,13 +502,22 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
 
               {/* ── Product Video (optional) ── */}
               <div className="col-span-2 mt-4">
-                <Label>Product Video <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
+                <div className="flex items-center gap-2">
+                  <Label>Product Video</Label>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-border px-1.5 py-0.5">
+                    Optional
+                  </span>
+                </div>
                 <p className="text-xs text-muted-foreground mt-1 mb-2">
-                  Short clip showing texture or styling. MP4, MOV or WebM recommended.
+                  Short clip showing texture or styling. Leave empty to skip — a video is not required.
                 </p>
                 {editing.video_url ? (
                   <div className="space-y-2">
-                    <video src={editing.video_url} controls className="w-full max-h-48 border border-border bg-black object-contain" />
+                    <video
+                      src={editing.video_url}
+                      controls
+                      className="w-full max-h-48 border border-border bg-black object-contain"
+                    />
                     <button
                       type="button"
                       onClick={() => setEditing((prev) => ({ ...prev, video_url: null }))}
@@ -530,8 +539,8 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
                     ) : (
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Video className="size-5" />
-                        <span className="text-sm">Click to upload a product video</span>
-                        <span className="text-xs">MP4 · MOV · WebM</span>
+                        <span className="text-sm">Click to upload a product video (optional)</span>
+                        <span className="text-xs">MP4 · MOV · WebM — skip if not needed</span>
                       </div>
                     )}
                   </div>
@@ -545,7 +554,8 @@ export const ProductsTab = ({ rate }: { rate: number }) => {
                 />
               </div>
             </div>
-                        <div className="flex gap-3 mt-6 justify-end">
+
+            <div className="flex gap-3 mt-6 justify-end">
               <Button variant="luxe" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
