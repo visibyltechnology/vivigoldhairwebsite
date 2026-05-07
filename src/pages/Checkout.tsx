@@ -11,9 +11,10 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { AlertTriangle, CreditCard, Loader2, Lock, ShoppingBag, X } from "lucide-react";
+import { AlertTriangle, CreditCard, Info, Loader2, Lock, ShoppingBag, X } from "lucide-react";
 
 const SHIPPING_FEES = { NGN: 5000, USD: 15 };
+const KORAPAY_MAX_NGN = 200_000;
 
 interface GatewayState {
   flutterwave: boolean;
@@ -111,7 +112,6 @@ const Checkout = () => {
   const total = subtotal + shippingFee;
   const partsNum = Number(parts);
 
-  // Interest rate for chosen plan
   const interestRatePct =
     partsNum === 2 ? installmentRates.two_parts :
     partsNum === 3 ? installmentRates.three_parts :
@@ -122,6 +122,16 @@ const Checkout = () => {
     : total;
   const interestAmount = totalWithInterest - total;
   const firstPay = partsNum > 1 ? Math.floor(totalWithInterest / partsNum) : total;
+
+  // Korapay caps each transaction at ₦200,000 (NGN only)
+  const korapayOk = currency !== "NGN" || firstPay <= KORAPAY_MAX_NGN;
+
+  // Auto-switch away from Korapay when the current payment amount exceeds its limit
+  useEffect(() => {
+    if (!korapayOk && selectedGateway === "korapay" && gateways.flutterwave) {
+      setSelectedGateway("flutterwave");
+    }
+  }, [korapayOk, selectedGateway, gateways.flutterwave]);
 
   const enabledCount = (gateways.flutterwave ? 1 : 0) + (gateways.korapay ? 1 : 0);
   const showGatewayPicker = enabledCount > 1;
@@ -138,6 +148,10 @@ const Checkout = () => {
     }
     if (enabledCount === 0) {
       toast.error("No payment gateway is active. Please contact the store.");
+      return;
+    }
+    if (selectedGateway === "korapay" && !korapayOk) {
+      toast.error(`This amount exceeds Korapay's ₦200,000 limit. Please use Flutterwave or choose a smaller instalment plan.`);
       return;
     }
 
@@ -272,19 +286,36 @@ const Checkout = () => {
                     </button>
                   )}
                   {gateways.korapay && (
-                    <button
-                      onClick={() => setSelectedGateway("korapay")}
-                      className={`border p-4 text-left transition ${
-                        selectedGateway === "korapay"
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <p className="font-medium text-sm">🟣 Korapay</p>
-                      <p className="text-xs text-muted-foreground mt-1">Cards · Bank transfer · USSD</p>
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => korapayOk && setSelectedGateway("korapay")}
+                        disabled={!korapayOk}
+                        className={`w-full border p-4 text-left transition ${
+                          !korapayOk
+                            ? "border-border opacity-40 cursor-not-allowed"
+                            : selectedGateway === "korapay"
+                            ? "border-primary bg-primary/10"
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <p className="font-medium text-sm">🟣 Korapay</p>
+                        <p className="text-xs text-muted-foreground mt-1">Cards · Bank transfer · USSD</p>
+                        {!korapayOk && (
+                          <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
+                            <Info className="size-3 inline" /> Limit: ₦200,000 per payment
+                          </p>
+                        )}
+                      </button>
+                    </div>
                   )}
                 </div>
+                {gateways.korapay && !korapayOk && (
+                  <p className="text-xs text-amber-500 mt-3 flex items-start gap-2">
+                    <Info className="size-3 mt-0.5 flex-shrink-0" />
+                    Korapay is unavailable for this amount (₦{firstPay.toLocaleString()} exceeds the ₦200,000 per-payment limit).
+                    Using Flutterwave instead, or choose a 3 or 4-part instalment plan to bring each payment under the limit.
+                  </p>
+                )}
               </section>
             )}
 
@@ -303,24 +334,32 @@ const Checkout = () => {
                   { p: "2", label: "÷2", sub: "2 parts", rate: installmentRates.two_parts },
                   { p: "3", label: "÷3", sub: "3 parts", rate: installmentRates.three_parts },
                   { p: "4", label: "÷4", sub: "4 parts", rate: installmentRates.four_parts },
-                ] as const).map(({ p, label, sub, rate: pRate }) => (
-                  <Label
-                    key={p}
-                    htmlFor={`p-${p}`}
-                    className={`border p-4 cursor-pointer text-center transition ${
-                      parts === p ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
-                    }`}
-                  >
-                    <RadioGroupItem value={p} id={`p-${p}`} className="sr-only" />
-                    <div className="font-display text-2xl">{label}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{sub}</div>
-                    {p !== "1" && (
-                      <div className={`text-[10px] mt-1 font-medium ${pRate > 0 ? "text-primary/70" : "text-emerald-400"}`}>
-                        {interestLabel(pRate)}
-                      </div>
-                    )}
-                  </Label>
-                ))}
+                ] as const).map(({ p, label, sub, rate: pRate }) => {
+                  const pNum = Number(p);
+                  const pInterest = pNum > 1 && pRate > 0 ? Math.round(total * (1 + pRate / 100)) : total;
+                  const pFirst = pNum > 1 ? Math.floor(pInterest / pNum) : total;
+                  const pKoraOk = currency !== "NGN" || pFirst <= KORAPAY_MAX_NGN;
+                  const koraOnlyAndOver = gateways.korapay && !gateways.flutterwave && !pKoraOk;
+                  return (
+                    <Label
+                      key={p}
+                      htmlFor={`p-${p}`}
+                      className={`border p-4 cursor-pointer text-center transition ${
+                        koraOnlyAndOver ? "opacity-40 cursor-not-allowed" :
+                        parts === p ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <RadioGroupItem value={p} id={`p-${p}`} className="sr-only" disabled={koraOnlyAndOver} />
+                      <div className="font-display text-2xl">{label}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{sub}</div>
+                      {p !== "1" && (
+                        <div className={`text-[10px] mt-1 font-medium ${pRate > 0 ? "text-primary/70" : "text-emerald-400"}`}>
+                          {interestLabel(pRate)}
+                        </div>
+                      )}
+                    </Label>
+                  );
+                })}
               </RadioGroup>
             </section>
           </div>
