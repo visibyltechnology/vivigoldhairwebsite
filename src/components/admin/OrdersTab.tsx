@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Search, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, ChevronDown, ChevronRight, MapPin } from "lucide-react";
 
 interface Order {
   id: string;
@@ -36,6 +36,14 @@ interface OrderItem {
   line_total: number;
 }
 
+interface ShippingAddress {
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  notes?: string;
+}
+
 const statusColors: Record<string, string> = {
   pending: "text-yellow-400 border-yellow-400/30 bg-yellow-400/10",
   processing: "text-blue-400 border-blue-400/30 bg-blue-400/10",
@@ -62,6 +70,7 @@ export const OrdersTab = () => {
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [items, setItems] = useState<Record<string, OrderItem[]>>({});
+  const [shippingAddresses, setShippingAddresses] = useState<Record<string, ShippingAddress>>({});
 
   const load = async () => {
     const { data } = await supabase
@@ -98,10 +107,40 @@ export const OrdersTab = () => {
       return;
     }
     setExpanded(orderId);
+
+    const fetchPromises: Promise<void>[] = [];
+
     if (!items[orderId]) {
-      const { data } = await supabase.from("order_items").select("*").eq("order_id", orderId);
-      if (data) setItems((prev) => ({ ...prev, [orderId]: data as OrderItem[] }));
+      fetchPromises.push(
+        supabase
+          .from("order_items")
+          .select("*")
+          .eq("order_id", orderId)
+          .then(({ data }) => {
+            if (data) setItems((prev) => ({ ...prev, [orderId]: data as OrderItem[] }));
+          })
+      );
     }
+
+    if (!shippingAddresses[orderId]) {
+      fetchPromises.push(
+        supabase
+          .from("orders")
+          .select("shipping_address")
+          .eq("id", orderId)
+          .single()
+          .then(({ data }) => {
+            if (data?.shipping_address) {
+              setShippingAddresses((prev) => ({
+                ...prev,
+                [orderId]: data.shipping_address as ShippingAddress,
+              }));
+            }
+          })
+      );
+    }
+
+    await Promise.all(fetchPromises);
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -212,23 +251,68 @@ export const OrdersTab = () => {
                   <tr className="bg-background/40">
                     <td colSpan={9} className="p-5">
                       <div className="grid md:grid-cols-3 gap-6">
-                        <div className="md:col-span-2">
-                          <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">Items</h4>
-                          <div className="space-y-2">
-                            {(items[o.id] || []).map((it) => (
-                              <div key={it.id} className="flex justify-between text-sm border border-border bg-card px-3 py-2">
-                                <span>
-                                  {it.product_name} <span className="text-muted-foreground">× {it.quantity}</span>
-                                </span>
-                                <span>{sym(o.currency)}{Number(it.line_total).toLocaleString()}</span>
-                              </div>
-                            ))}
-                            {(items[o.id]?.length ?? 0) === 0 && (
-                              <div className="text-xs text-muted-foreground">Loading items…</div>
-                            )}
+                        <div className="md:col-span-2 space-y-5">
+                          <div>
+                            <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">Items</h4>
+                            <div className="space-y-2">
+                              {(items[o.id] || []).map((it) => (
+                                <div key={it.id} className="flex justify-between text-sm border border-border bg-card px-3 py-2">
+                                  <span>
+                                    {it.product_name} <span className="text-muted-foreground">× {it.quantity}</span>
+                                  </span>
+                                  <span>{sym(o.currency)}{Number(it.line_total).toLocaleString()}</span>
+                                </div>
+                              ))}
+                              {(items[o.id]?.length ?? 0) === 0 && (
+                                <div className="text-xs text-muted-foreground">Loading items…</div>
+                              )}
+                            </div>
+                            <div className="mt-3 text-xs text-muted-foreground">
+                              Subtotal {sym(o.currency)}{Number(o.subtotal).toLocaleString()} · Shipping {sym(o.currency)}{Number(o.shipping_fee).toLocaleString()}
+                            </div>
                           </div>
-                          <div className="mt-3 text-xs text-muted-foreground">
-                            Subtotal {sym(o.currency)}{Number(o.subtotal).toLocaleString()} · Shipping {sym(o.currency)}{Number(o.shipping_fee).toLocaleString()}
+
+                          {/* Delivery details */}
+                          <div>
+                            <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                              <MapPin className="size-3" /> Delivery details
+                            </h4>
+                            {shippingAddresses[o.id] ? (
+                              <div className="border border-border bg-card px-4 py-3 space-y-1.5 text-sm">
+                                {shippingAddresses[o.id].address && (
+                                  <div className="flex gap-2">
+                                    <span className="text-muted-foreground w-16 shrink-0">Address</span>
+                                    <span>{shippingAddresses[o.id].address}</span>
+                                  </div>
+                                )}
+                                {shippingAddresses[o.id].city && (
+                                  <div className="flex gap-2">
+                                    <span className="text-muted-foreground w-16 shrink-0">City</span>
+                                    <span>{shippingAddresses[o.id].city}</span>
+                                  </div>
+                                )}
+                                {shippingAddresses[o.id].state && (
+                                  <div className="flex gap-2">
+                                    <span className="text-muted-foreground w-16 shrink-0">State</span>
+                                    <span>{shippingAddresses[o.id].state}</span>
+                                  </div>
+                                )}
+                                {shippingAddresses[o.id].country && (
+                                  <div className="flex gap-2">
+                                    <span className="text-muted-foreground w-16 shrink-0">Country</span>
+                                    <span>{shippingAddresses[o.id].country}</span>
+                                  </div>
+                                )}
+                                {shippingAddresses[o.id].notes && (
+                                  <div className="flex gap-2 pt-1 border-t border-border mt-1">
+                                    <span className="text-muted-foreground w-16 shrink-0">Notes</span>
+                                    <span className="text-muted-foreground italic">{shippingAddresses[o.id].notes}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-muted-foreground">Loading delivery details…</div>
+                            )}
                           </div>
                         </div>
 
