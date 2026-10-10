@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "https://aurora-leaf-studio.vercel.app/$1"
+    }
+  ]
+}
